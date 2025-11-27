@@ -47,7 +47,7 @@ const OPTION_COLORS = [
 ];
 
 export default function MultiplayerKahoot() {
-  const [mode, setMode] = useState<'modeSelect' | 'hostSetup' | 'playerSetup' | 'hostGame' | 'playerGame' | 'results'>('modeSelect');
+  const [mode, setMode] = useState<'modeSelect' | 'hostSetup' | 'playerSetup' | 'hostGame' | 'playerGame'>('modeSelect');
   const [userName, setUserName] = useState('');
   const [gameCode, setGameCode] = useState('');
   const [gameId, setGameId] = useState('');
@@ -58,7 +58,6 @@ export default function MultiplayerKahoot() {
   const [answered, setAnswered] = useState(false);
   const [gameState, setGameState] = useState<'waiting' | 'question' | 'showing'>('waiting');
   const [mounted, setMounted] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [playerId, setPlayerId] = useState('');
 
   useEffect(() => {
@@ -215,12 +214,6 @@ export default function MultiplayerKahoot() {
     setGameCode('');
   };
 
-  const copyGameCode = () => {
-    navigator.clipboard.writeText(gameCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   if (!mounted) return null;
 
   // MODE SELECT
@@ -230,7 +223,7 @@ export default function MultiplayerKahoot() {
         <div className="text-center space-y-8 max-w-md w-full">
           <div className="space-y-4">
             <h1 className="text-7xl font-black text-white drop-shadow-2xl">RAMOOT!</h1>
-            <p className="text-2xl text-white/90 font-semibold">TEMEL 13 GERÇEK BİTİRME SINAVI</p>
+            <p className="text-2xl text-white/90 font-semibold">TEMEL 13 GERÇEK BİTİRME SINAVI 🎉</p>
           </div>
 
           <div className="space-y-3">
@@ -445,7 +438,7 @@ export default function MultiplayerKahoot() {
                 <button
                   key={idx}
                   onClick={() => playerSubmitAnswer(idx)}
-                  className={`${OPTION_COLORS[idx].bg} ${OPTION_COLORS[idx].hover} text-white p-8 rounded-2xl text-2xl font-black transition-all transform hover:scale-105 shadow-xl`}
+                  className={`${OPTION_COLORS[idx].bg} ${OPTION_COLORS[idx].hover} text-white p-8 rounded-2xl text-2xl font-black transition-all transform hover:scale-105 shadow-xl cursor-pointer`}
                 >
                   {option}
                 </button>
