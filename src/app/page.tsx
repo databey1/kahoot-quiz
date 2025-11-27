@@ -8,6 +8,7 @@ import { getDatabase, ref, set, get, onValue, remove, child } from 'firebase/dat
 const firebaseConfig = {
   apiKey: "AIzaSyCWomiP6AUe13iKexXZAPibxvi67zrY11A",
   authDomain: "ramoot-game.firebaseapp.com",
+  databaseURL: "https://ramoot-game-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "ramoot-game",
   storageBucket: "ramoot-game.firebasestorage.app",
   messagingSenderId: "403149392724",
@@ -229,7 +230,7 @@ export default function MultiplayerKahoot() {
         <div className="text-center space-y-8 max-w-md w-full">
           <div className="space-y-4">
             <h1 className="text-7xl font-black text-white drop-shadow-2xl">RAMOOT!</h1>
-            <p className="text-2xl text-white/90 font-semibold">TEMEL 13 GERÇEK BİTİRME SINAVI 🎉</p>
+            <p className="text-2xl text-white/90 font-semibold">TEMEL 13 GERÇEK BİTİRME SINAVI</p>
           </div>
 
           <div className="space-y-3">
