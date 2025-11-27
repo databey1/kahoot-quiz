@@ -1,9 +1,7 @@
-'use client';
-
 import React, { useState, useEffect } from 'react';
-import { Trophy, Users, Clock, Zap, LogOut, Play, Eye, Copy, Check } from 'lucide-react';
+import { Trophy, Users, Clock, Zap, LogOut, Play, Eye } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, set, get, onValue, remove, child } from 'firebase/database';
+import { getDatabase, ref, set, get, onValue, remove } from 'firebase/database';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCWomiP6AUe13iKexXZAPibxvi67zrY11A",
@@ -15,8 +13,13 @@ const firebaseConfig = {
   appId: "1:403149392724:web:36fbcff884eec5bac6d6c1"
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+let app, db;
+try {
+  app = initializeApp(firebaseConfig);
+  db = getDatabase(app);
+} catch (e) {
+  console.log('Firebase init error:', e);
+}
 
 const QUESTIONS = [
   { id: 1, questionText: "Ditching esnasında tüm sınıfı raft'e çekerken tüm gün ayak görüp yorgunluktan ve nefessizlikten inkapasite olan kimdir?", options: ["Cansu", "İlkay", "Aleyna", "Ezher"], correctAnswerIndex: 1, points: 1000 },
@@ -39,26 +42,19 @@ const QUESTIONS = [
   { id: 18, questionText: "Uğur Dündar gibi araştırmacı gazeteci, Picasso gibi soyut bir ressam ve İngiltere Kralı gibi İngilicce bilen kimdir?", options: ["Zeynep", "Cansu", "Serkan", "Oğuz"], correctAnswerIndex: 2, points: 1000 },
 ];
 
-const OPTION_COLORS = [
-  { bg: 'bg-red-500', hover: 'hover:bg-red-600' },
-  { bg: 'bg-blue-500', hover: 'hover:bg-blue-600' },
-  { bg: 'bg-yellow-500', hover: 'hover:bg-yellow-600' },
-  { bg: 'bg-green-500', hover: 'hover:bg-green-600' },
-];
-
-export default function MultiplayerKahoot() {
-  const [mode, setMode] = useState<'modeSelect' | 'hostSetup' | 'playerSetup' | 'hostGame' | 'playerGame'>('modeSelect');
+export default function MultiplayerGame() {
+  const [mode, setMode] = useState('modeSelect');
   const [userName, setUserName] = useState('');
   const [gameCode, setGameCode] = useState('');
   const [gameId, setGameId] = useState('');
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [players, setPlayers] = useState<any[]>([]);
+  const [players, setPlayers] = useState([]);
   const [myScore, setMyScore] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [answered, setAnswered] = useState(false);
-  const [gameState, setGameState] = useState<'waiting' | 'question' | 'showing'>('waiting');
-  const [mounted, setMounted] = useState(false);
+  const [gameState, setGameState] = useState('waiting');
   const [playerId, setPlayerId] = useState('');
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -69,51 +65,59 @@ export default function MultiplayerKahoot() {
   };
 
   const startHostGame = async () => {
-    if (!userName.trim()) return;
+    if (!userName.trim() || !db) return;
     const code = generateGameCode();
     setGameId(code);
     setGameCode(code);
 
-    await set(ref(db, `games/${code}`), {
-      host: userName,
-      currentQuestion: 0,
-      gameState: 'waiting',
-      createdAt: Date.now(),
-    });
-
-    setMode('hostGame');
-    listenToHostGame(code);
+    try {
+      await set(ref(db, `games/${code}`), {
+        host: userName,
+        currentQuestion: 0,
+        gameState: 'waiting',
+        createdAt: Date.now(),
+      });
+      setMode('hostGame');
+      listenToHostGame(code);
+    } catch (e) {
+      console.error('Error starting game:', e);
+      alert('Oyun başlatılamadı!');
+    }
   };
 
   const joinGame = async () => {
-    if (!userName.trim() || !gameCode.trim()) return;
+    if (!userName.trim() || !gameCode.trim() || !db) return;
 
     const code = gameCode.toUpperCase();
-    const gameRef = ref(db, `games/${code}`);
-    const gameSnap = await get(gameRef);
+    try {
+      const gameRef = ref(db, `games/${code}`);
+      const gameSnap = await get(gameRef);
 
-    if (!gameSnap.exists()) {
-      alert('Oyun bulunamadı!');
-      return;
+      if (!gameSnap.exists()) {
+        alert('Oyun bulunamadı!');
+        return;
+      }
+
+      const id = `${userName}-${Date.now()}`;
+      setPlayerId(id);
+      setGameId(code);
+
+      await set(ref(db, `games/${code}/players/${id}`), {
+        name: userName,
+        score: 0,
+        answered: false,
+        answer: null,
+      });
+
+      setMode('playerGame');
+      listenToPlayerGame(code, id);
+    } catch (e) {
+      console.error('Error joining game:', e);
+      alert('Oyuna katılamadı!');
     }
-
-    const id = `${userName}-${Date.now()}`;
-    setPlayerId(id);
-    setGameId(code);
-
-    await set(ref(db, `games/${code}/players/${id}`), {
-      name: userName,
-      score: 0,
-      answered: false,
-      answer: null,
-      joinedAt: Date.now(),
-    });
-
-    setMode('playerGame');
-    listenToPlayerGame(code, id);
   };
 
-  const listenToHostGame = (code: string) => {
+  const listenToHostGame = (code) => {
     onValue(ref(db, `games/${code}`), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
@@ -125,7 +129,7 @@ export default function MultiplayerKahoot() {
     onValue(ref(db, `games/${code}/players`), (snapshot) => {
       if (snapshot.exists()) {
         const playersData = snapshot.val();
-        const playersList = Object.entries(playersData).map(([id, data]: any) => ({
+        const playersList = Object.entries(playersData).map(([id, data]) => ({
           id,
           ...data,
         }));
@@ -134,7 +138,7 @@ export default function MultiplayerKahoot() {
     });
   };
 
-  const listenToPlayerGame = (code: string, id: string) => {
+  const listenToPlayerGame = (code, id) => {
     onValue(ref(db, `games/${code}`), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
@@ -146,7 +150,7 @@ export default function MultiplayerKahoot() {
     onValue(ref(db, `games/${code}/players`), (snapshot) => {
       if (snapshot.exists()) {
         const playersData = snapshot.val();
-        const playersList = Object.entries(playersData).map(([pid, data]: any) => ({
+        const playersList = Object.entries(playersData).map(([pid, data]) => ({
           id: pid,
           ...data,
         }));
@@ -155,7 +159,7 @@ export default function MultiplayerKahoot() {
         if (me) {
           setMyScore(me.score || 0);
           setAnswered(me.answered || false);
-          setSelectedAnswer(me.answer || null);
+          setSelectedAnswer(me.answer);
         }
       }
     });
@@ -173,8 +177,6 @@ export default function MultiplayerKahoot() {
     if (currentQuestion < QUESTIONS.length - 1) {
       await set(ref(db, `games/${gameId}/currentQuestion`), currentQuestion + 1);
       await set(ref(db, `games/${gameId}/gameState`), 'waiting');
-      setCurrentQuestion(currentQuestion + 1);
-      setSelectedAnswer(null);
 
       const snapshot = await get(ref(db, `games/${gameId}/players`));
       if (snapshot.exists()) {
@@ -185,174 +187,162 @@ export default function MultiplayerKahoot() {
         }
       }
     } else {
-      await set(ref(db, `games/${gameId}/gameState`), 'finished');
+      await remove(ref(db, `games/${gameId}`));
+      setMode('modeSelect');
     }
   };
 
-  const playerSubmitAnswer = async (answerIndex: number) => {
-    if (answered) return;
+  const playerSubmitAnswer = async (answerIndex) => {
+    if (answered || !db) return;
 
     const question = QUESTIONS[currentQuestion];
     const isCorrect = answerIndex === question.correctAnswerIndex;
 
-    await set(ref(db, `games/${gameId}/players/${playerId}/answer`), answerIndex);
-    await set(ref(db, `games/${gameId}/players/${playerId}/answered`), true);
+    try {
+      await set(ref(db, `games/${gameId}/players/${playerId}/answer`), answerIndex);
+      await set(ref(db, `games/${gameId}/players/${playerId}/answered`), true);
 
-    if (isCorrect) {
-      const newScore = myScore + question.points + 500;
-      await set(ref(db, `games/${gameId}/players/${playerId}/score`), newScore);
+      if (isCorrect) {
+        const newScore = myScore + question.points + 500;
+        await set(ref(db, `games/${gameId}/players/${playerId}/score`), newScore);
+      }
+
+      setSelectedAnswer(answerIndex);
+      setAnswered(true);
+    } catch (e) {
+      console.error('Error submitting answer:', e);
     }
-
-    setSelectedAnswer(answerIndex);
-    setAnswered(true);
   };
 
-  const endGame = async () => {
-    await remove(ref(db, `games/${gameId}`));
-    setMode('modeSelect');
-    setUserName('');
-    setGameCode('');
-  };
-
-  if (!mounted) return null;
-
-  // MODE SELECT
-  if (mode === 'modeSelect') {
+  if (!mounted || !db) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-500 flex items-center justify-center p-4">
-        <div className="text-center space-y-8 max-w-md w-full">
-          <div className="space-y-4">
-            <h1 className="text-7xl font-black text-white drop-shadow-2xl">RAMOOT!</h1>
-            <p className="text-2xl text-white/90 font-semibold">TEMEL 13 GERÇEK BİTİRME SINAVI 🎉</p>
-          </div>
-
-          <div className="space-y-3">
-            <input
-              type="text"
-              placeholder="Adını gir..."
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-              className="w-full px-6 py-4 rounded-full text-xl font-bold text-center border-4 border-white/50 bg-white/20 text-white placeholder-white/50 focus:outline-none"
-            />
-            
-            <button
-              onClick={() => setMode('hostSetup')}
-              disabled={!userName.trim()}
-              className="w-full bg-white text-purple-600 px-8 py-4 rounded-full text-xl font-black hover:scale-105 transition-transform shadow-2xl disabled:opacity-50"
-            >
-              <Play className="inline mr-2" size={24} /> Oyun Başlat
-            </button>
-
-            <button
-              onClick={() => setMode('playerSetup')}
-              disabled={!userName.trim()}
-              className="w-full bg-blue-500 text-white px-8 py-4 rounded-full text-xl font-black hover:scale-105 transition-transform shadow-2xl disabled:opacity-50"
-            >
-              <Eye className="inline mr-2" size={24} /> Oyuna Katıl
-            </button>
-          </div>
+      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-500 flex items-center justify-center">
+        <div className="text-white text-center text-2xl font-black">
+          Yükleniyor...
         </div>
       </div>
     );
   }
 
-  // HOST SETUP
+  const COLORS = ['bg-red-500', 'bg-blue-500', 'bg-yellow-500', 'bg-green-500'];
+  const question = QUESTIONS[currentQuestion];
+
+  if (mode === 'modeSelect') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-500 flex items-center justify-center p-4">
+        <div className="text-center space-y-8 max-w-md w-full">
+          <h1 className="text-7xl font-black text-white drop-shadow-2xl">RAMOOT!</h1>
+          <p className="text-2xl text-white/90 font-semibold">TEMEL 13 GERÇEK BİTİRME SINAVI 🎉</p>
+
+          <input
+            type="text"
+            placeholder="Adını gir..."
+            value={userName}
+            onChange={(e) => setUserName(e.target.value)}
+            className="w-full px-6 py-4 rounded-full text-xl font-bold text-center border-4 border-white/50 bg-white/20 text-white placeholder-white/50"
+          />
+          
+          <button
+            onClick={() => setMode('hostSetup')}
+            className="w-full bg-white text-purple-600 px-8 py-4 rounded-full text-xl font-black hover:scale-105 transition-transform"
+          >
+            Oyun Başlat
+          </button>
+
+          <button
+            onClick={() => setMode('playerSetup')}
+            className="w-full bg-blue-500 text-white px-8 py-4 rounded-full text-xl font-black hover:scale-105 transition-transform"
+          >
+            Oyuna Katıl
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (mode === 'hostSetup') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-500 via-teal-500 to-blue-500 flex items-center justify-center p-4">
         <div className="text-center space-y-8 max-w-md w-full">
-          <h1 className="text-5xl font-black text-white drop-shadow-2xl">Oyun Başlat</h1>
+          <h1 className="text-5xl font-black text-white">Oyun Başlat</h1>
           <button
             onClick={startHostGame}
-            className="w-full bg-white text-green-600 px-8 py-6 rounded-full text-2xl font-black hover:scale-110 transition-transform shadow-2xl"
+            className="w-full bg-white text-green-600 px-8 py-6 rounded-full text-2xl font-black hover:scale-110 transition-transform"
           >
             Başla 🚀
           </button>
           <button
             onClick={() => setMode('modeSelect')}
-            className="w-full bg-red-500 text-white px-8 py-4 rounded-full text-xl font-black hover:scale-105 transition-transform"
+            className="w-full bg-red-500 text-white px-8 py-4 rounded-full text-xl font-black"
           >
-            Geri Dön
+            Geri
           </button>
         </div>
       </div>
     );
   }
 
-  // PLAYER SETUP
   if (mode === 'playerSetup') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-500 via-pink-500 to-purple-600 flex items-center justify-center p-4">
         <div className="text-center space-y-8 max-w-md w-full">
-          <h1 className="text-5xl font-black text-white drop-shadow-2xl">Oyuna Katıl</h1>
+          <h1 className="text-5xl font-black text-white">Oyuna Katıl</h1>
           <input
             type="text"
-            placeholder="Oyun Kodu"
+            placeholder="Kod"
             value={gameCode}
             onChange={(e) => setGameCode(e.target.value.toUpperCase())}
             maxLength={4}
-            className="w-full px-6 py-4 rounded-full text-3xl font-black text-center border-4 border-white/50 bg-white/20 text-white placeholder-white/50 focus:outline-none tracking-widest"
+            className="w-full px-6 py-4 rounded-full text-3xl font-black text-center border-4 border-white/50 bg-white/20 text-white"
           />
           <button
             onClick={joinGame}
-            disabled={!gameCode.trim()}
-            className="w-full bg-white text-orange-600 px-8 py-6 rounded-full text-2xl font-black hover:scale-110 transition-transform shadow-2xl disabled:opacity-50"
+            className="w-full bg-white text-orange-600 px-8 py-6 rounded-full text-2xl font-black hover:scale-110 transition-transform"
           >
             Katıl ✓
           </button>
           <button
             onClick={() => setMode('modeSelect')}
-            className="w-full bg-red-500 text-white px-8 py-4 rounded-full text-xl font-black hover:scale-105 transition-transform"
+            className="w-full bg-red-500 text-white px-8 py-4 rounded-full text-xl font-black"
           >
-            Geri Dön
+            Geri
           </button>
         </div>
       </div>
     );
   }
 
-  // HOST GAME
   if (mode === 'hostGame') {
-    const question = QUESTIONS[currentQuestion];
     const answeredCount = players.filter((p) => p.answered).length;
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 p-4">
         <div className="max-w-6xl mx-auto">
           <div className="mb-6 text-white text-center">
-            <p className="text-2xl font-black">
-              Oyun Kodu: <span className="text-yellow-300 text-4xl">{gameCode}</span>
-            </p>
-            <p className="text-xl mt-2">
-              {players.length} oyuncu | {answeredCount} cevapladı
-            </p>
+            <p className="text-2xl font-black">Kod: <span className="text-yellow-300 text-4xl">{gameCode}</span></p>
+            <p className="text-xl mt-2">{players.length} oyuncu | {answeredCount} cevapladı</p>
           </div>
 
-          <div className="bg-white rounded-3xl p-8 mb-6 shadow-2xl">
+          <div className="bg-white rounded-3xl p-8 mb-6">
             <h2 className="text-3xl font-black text-gray-800 text-center mb-6">
               Soru {currentQuestion + 1}/{QUESTIONS.length}
             </h2>
-            <p className="text-2xl font-bold text-gray-800 text-center">
-              {question.questionText}
-            </p>
+            <p className="text-2xl font-bold text-gray-800 text-center">{question.questionText}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4 mb-6">
             {question.options.map((option, idx) => (
-              <div
-                key={idx}
-                className={`${OPTION_COLORS[idx].bg} text-white p-6 rounded-2xl text-xl font-black text-center`}
-              >
+              <div key={idx} className={`${COLORS[idx]} text-white p-6 rounded-2xl text-xl font-black text-center`}>
                 {option}
               </div>
             ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-3 gap-4 mb-6">
             {gameState === 'waiting' && (
               <button
                 onClick={hostShowQuestion}
-                className="bg-yellow-400 text-gray-800 px-6 py-4 rounded-full text-xl font-black hover:scale-105 transition-transform shadow-2xl md:col-span-3"
+                className="col-span-3 bg-yellow-400 text-gray-800 px-6 py-4 rounded-full text-xl font-black hover:scale-105"
               >
                 Soruyu Göster
               </button>
@@ -360,39 +350,33 @@ export default function MultiplayerKahoot() {
             {gameState === 'question' && (
               <button
                 onClick={hostShowAnswer}
-                className="bg-orange-500 text-white px-6 py-4 rounded-full text-xl font-black hover:scale-105 transition-transform shadow-2xl md:col-span-3"
+                className="col-span-3 bg-orange-500 text-white px-6 py-4 rounded-full text-xl font-black hover:scale-105"
               >
                 Sonucu Göster
               </button>
             )}
             {gameState === 'showing' && (
               <>
-                <div className="bg-green-500 text-white p-4 rounded-2xl text-center font-black text-lg">
+                <div className="col-span-3 bg-green-500 text-white p-4 rounded-2xl text-center font-black">
                   Doğru: {question.options[question.correctAnswerIndex]}
                 </div>
                 <button
                   onClick={hostNextQuestion}
-                  className="bg-blue-500 text-white px-6 py-4 rounded-full text-xl font-black hover:scale-105 transition-transform shadow-2xl"
+                  className="bg-blue-500 text-white px-6 py-4 rounded-full text-xl font-black hover:scale-105"
                 >
                   Sonraki
-                </button>
-                <button
-                  onClick={endGame}
-                  className="bg-red-500 text-white px-6 py-4 rounded-full text-xl font-black hover:scale-105 transition-transform shadow-2xl"
-                >
-                  Oyunu Bitir
                 </button>
               </>
             )}
           </div>
 
-          <div className="bg-white/20 backdrop-blur-md rounded-3xl p-6 border-4 border-white/30">
+          <div className="bg-white/20 backdrop-blur-md rounded-3xl p-6">
             <h3 className="text-white text-2xl font-black mb-4">Sıralama</h3>
             <div className="space-y-2">
               {players.slice(0, 10).map((p, idx) => (
                 <div key={p.id} className="flex justify-between items-center bg-white/20 p-3 rounded-lg text-white font-bold">
                   <span>{idx + 1}. {p.name}</span>
-                  <span className="text-yellow-300 text-lg">{p.score}</span>
+                  <span className="text-yellow-300">{p.score}</span>
                 </div>
               ))}
             </div>
@@ -402,34 +386,27 @@ export default function MultiplayerKahoot() {
     );
   }
 
-  // PLAYER GAME
   if (mode === 'playerGame') {
-    const question = QUESTIONS[currentQuestion];
-
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 p-4">
         <div className="max-w-4xl mx-auto">
-          <div className="bg-white/20 backdrop-blur-md rounded-2xl p-4 mb-6 flex justify-between items-center border-2 border-white/30">
+          <div className="bg-white/20 rounded-2xl p-4 mb-6 flex justify-between items-center">
             <div className="text-white">
               <p className="font-bold">{userName}</p>
               <p className="text-sm">Soru {currentQuestion + 1}/{QUESTIONS.length}</p>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-white font-black text-2xl">📊 {myScore}</div>
-              <div className="text-white font-black text-2xl">{players.length} oyuncu</div>
+            <div className="flex items-center gap-4 text-white font-black text-2xl">
+              <div>📊 {myScore}</div>
+              <div>{players.length} 👥</div>
             </div>
           </div>
 
-          <div className="bg-white rounded-3xl p-8 mb-6 shadow-2xl">
-            <h2 className="text-2xl font-black text-gray-800 text-center">
-              {question.questionText}
-            </h2>
+          <div className="bg-white rounded-3xl p-8 mb-6">
+            <h2 className="text-2xl font-black text-gray-800 text-center">{question.questionText}</h2>
           </div>
 
           {gameState === 'waiting' && (
-            <div className="text-center text-white text-2xl font-black">
-              Oyun başlamayı bekle...
-            </div>
+            <div className="text-center text-white text-2xl font-black">Bekle...</div>
           )}
 
           {gameState === 'question' && !answered && (
@@ -438,7 +415,7 @@ export default function MultiplayerKahoot() {
                 <button
                   key={idx}
                   onClick={() => playerSubmitAnswer(idx)}
-                  className={`${OPTION_COLORS[idx].bg} ${OPTION_COLORS[idx].hover} text-white p-8 rounded-2xl text-2xl font-black transition-all transform hover:scale-105 shadow-xl cursor-pointer`}
+                  className={`${COLORS[idx]} text-white p-8 rounded-2xl text-2xl font-black hover:scale-105 cursor-pointer`}
                 >
                   {option}
                 </button>
@@ -454,7 +431,7 @@ export default function MultiplayerKahoot() {
             </div>
           )}
 
-          <div className="mt-8 bg-white/20 backdrop-blur-md rounded-3xl p-6 border-4 border-white/30">
+          <div className="mt-8 bg-white/20 rounded-3xl p-6">
             <h3 className="text-white text-2xl font-black mb-4">Top 5</h3>
             <div className="space-y-2">
               {players.slice(0, 5).map((p, idx) => (
