@@ -8,6 +8,7 @@ import { getDatabase, ref, set, get, onValue, remove, child } from 'firebase/dat
 const firebaseConfig = {
   apiKey: "AIzaSyCWomiP6AUe13iKexXZAPibxvi67zrY11A",
   authDomain: "ramoot-game.firebaseapp.com",
+  databaseURL: "https://ramoot-game-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "ramoot-game",
   storageBucket: "ramoot-game.firebasestorage.app",
   messagingSenderId: "403149392724",
